@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>GROW · Acceso equipo</title>
+  <style>
+    :root{--navy:#14213D;--navy2:#1d2d52;--cherry:#B3123C;--sand:#F4F1EB}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(900px 400px at 80% -10%,#26396a 0,transparent 60%),var(--navy);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#fff}
+    .gate{width:min(380px,92vw);background:var(--navy2);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+    h1{font:700 1.3rem Georgia,serif;margin:0 0 6px}
+    p{color:#c9cfdf;margin:0 0 20px;font-size:.92rem}
+    label{display:block;font-size:.85rem;color:#c9cfdf;margin-bottom:6px}
+    input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:#0f1a33;color:#fff;font:inherit}
+    input:focus-visible{outline:3px solid #f2b705;outline-offset:2px}
+    button{margin-top:16px;width:100%;padding:12px;border:0;border-radius:999px;background:var(--cherry);color:#fff;font:inherit;font-weight:600;font-size:1rem;cursor:pointer}
+    button:disabled{opacity:.6;cursor:progress}
+    #msg{min-height:1.3em;margin:12px 0 0;color:#ff9fb4;font-size:.9rem}
+    .back{display:block;margin-top:18px;text-align:center;color:#9aa4c0;font-size:.85rem;text-decoration:none}
+  </style>
+</head>
+<body>
+  <main class="gate">
+    <h1>GROW · Acceso equipo</h1>
+    <p>Contenido interno. Ingresa la clave para continuar.</p>
+    <form id="f" autocomplete="off">
+      <label for="pw">Clave</label>
+      <input id="pw" type="password" autocomplete="current-password" required autofocus>
+      <button id="go" type="submit">Entrar</button>
+      <p id="msg" role="alert"></p>
+    </form>
+    <a class="back" href="../">← Volver al sitio</a>
+  </main>
+
+  <script src="vault.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var V = window.GROW_VAULT;
+    var f = document.getElementById('f'), pw = document.getElementById('pw'), msg = document.getElementById('msg'), go = document.getElementById('go');
+    var enc = new TextEncoder(), dec = new TextDecoder();
+
+    function fromB64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+    function toB64(u) { var s = ''; for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
+    function safe(js) { return String(js).replace(/<\/(script)/gi, '<\\/$1'); }
+
+    async function deriveKey(pass, salt, iter) {
+      var km = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    }
+
+    function launch(parts, key, salt, iter) {
+      // Permite re-cifrar el contenido con la misma clave al exportar.
+      window.__growSeal = async function (newData) {
+        var iv = crypto.getRandomValues(new Uint8Array(12));
+        var payload = JSON.stringify({ body: parts.body, css: parts.css, js: parts.js, data: newData });
+        var ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, enc.encode(payload)));
+        return { v: 1, kdf: 'PBKDF2-SHA256', iter: iter, salt: toB64(salt), iv: toB64(iv), ct: toB64(ct) };
+      };
+      var page = '<!doctype html><html lang="es-CL"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+        '<meta name="robots" content="noindex,nofollow"><title>GROW · Intranet</title><style>' + parts.css + '</style></head><body>' + parts.body +
+        '<script>window.GROW_DATA = ' + safe(JSON.stringify(parts.data)) + ';<\/script><script>' + safe(parts.js) + '<\/script></body></html>';
+      document.open(); document.write(page); document.close();
+    }
+
+    f.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      if (!V || !window.crypto || !crypto.subtle) { msg.textContent = 'Este navegador no soporta el acceso seguro (requiere HTTPS).'; return; }
+      go.disabled = true; msg.textContent = 'Verificando…';
+      try {
+        var salt = fromB64(V.salt), iter = V.iter;
+        var key = await deriveKey(pw.value, salt, iter);
+        var plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(V.iv) }, key, fromB64(V.ct));
+        var parts = JSON.parse(dec.decode(plain));
+        launch(parts, key, salt, iter);
+      } catch (e) {
+        await new Promise(function (r) { setTimeout(r, 900); });
+        msg.textContent = 'Clave incorrecta.';
+        pw.select(); go.disabled = false;
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
