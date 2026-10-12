@@ -33,23 +33,4 @@ var SITE_CONFIG = {
       if (e.target.tagName === "A") { nav.classList.remove("open"); mb.setAttribute("aria-expanded", "false"); }
     });
   }
-
-  // Cabecera sólida al hacer scroll
-  var top = document.getElementById("top");
-  if (top) {
-    var onScroll = function () { top.classList.toggle("scrolled", window.scrollY > 24); };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-  }
-
-  // Aparición suave al hacer scroll (respeta reduced-motion vía CSS)
-  var els = document.querySelectorAll(".card, .mini, .person, .steps li, .ticks li, .cta, .hero-fig");
-  if ("IntersectionObserver" in window) {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) {
-        if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
-      });
-    }, { threshold: 0.12 });
-    els.forEach(function (el) { el.classList.add("rv"); io.observe(el); });
-  }
 })();
